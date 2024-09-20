@@ -2,6 +2,7 @@ import numpy as np
 import librosa
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score,confusion_matrix,precision_score,recall_score,f1_score
+
 def normalizeVoiceLen(y,normalizedLen):
     nframes=len(y)
     y = np.reshape(y,[nframes,1]).T
@@ -68,7 +69,7 @@ def plot_confusion_matrix(y_true, y_pred, labels):
 
 
 def get_evaluation(y_true, y_pred):
-    # y_pred가 확률일 경우 0.5 기준으로 이진 분류로 변환
+    # y_pred가 확률일 경우 0.56 기준으로 이진 분류로 변환
     y_pred = np.array(y_pred)
     print(y_pred.shape)
     y_true = np.array(y_true).flatten()  # y_true를 1차원으로 변환

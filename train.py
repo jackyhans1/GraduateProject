@@ -9,9 +9,9 @@ import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', type=str, default=r'datasets', help='root of data')
-parser.add_argument('--save_root', type=str, default=r'checkpoints/CNN', help='root of saved model.pth')
+parser.add_argument('--save_root', type=str, default=r'checkpoints/Transformer', help='root of saved model.pth')
 parser.add_argument('--epoch', type=int, default=50, help='epoch number')
-parser.add_argument('--lr', type=float, default=5e-4, help='learning rate')
+parser.add_argument('--lr', type=float, default=3e-4, help='learning rate') # 기존: 5e-4 -> 3e-4
 parser.add_argument('--batch_size', type=int, default=32, help='training batch size')
 parser.add_argument('--num_workers', type=int, default=8, help='num_workers')
 parser.add_argument('--random_seed', type=int, default=1, help='random seed')
@@ -22,12 +22,6 @@ parser.add_argument('--n_mfcc', type=int, default=16, help='characteristic dimen
 opt = parser.parse_args()
 
 def main():
-    # if opt.model_kind == 'rnn':
-    #     model = RNN(opt.n_mfcc)
-    # elif opt.model_kind == 'transformer':
-    #     model = Transformer(opt.n_mfcc)
-    # elif opt.model_kind == 'cnn':
-    #     model = CNN()
 
     if opt.model_kind == 'cnn':
         print("train by CNN")
@@ -57,7 +51,7 @@ def main():
     all_test_epoch_accuracy_emotion=[]
     model = model.to(device)
 
-    pos_weight = torch.tensor([0.75]).to(device)
+    pos_weight = torch.tensor([0.75]).to(device) #positiveData(Stressed) : negativeData(NotStressed) = 4: 3 데이터 비율이기에 보정
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight).to(device)    #Binary Cross Entropy with Logits Loss 활성화 함수 이용
 
     optimizer = optim.Adam(model.parameters(), opt.lr)
@@ -66,7 +60,7 @@ def main():
 
     for epo in range(opt.epoch):
         train_loss = 0
-        model.train()  # batch normalization , dropout 활성화
+        model.train()
 
         for index, (mfcc, emotion) in enumerate(train_iter): 
             mfcc, emotion =mfcc.to(device), emotion.to(device)
@@ -99,7 +93,7 @@ def main():
                 loss = criterion(output_emotion[:, 0].squeeze(), emotion)
                 test_loss += loss.item()
 
-                # 이진 분류 결과를 torch.sigmoid를 통해 확률로 변환하고, 0.5 기준으로 분류
+                # 이진 분류 결과를 torch.sigmoid를 통해 확률로 변환하고, 0.56 기준으로 분류
                 predicted_emotion = (torch.sigmoid(output_emotion[:, 0]) > 0.56).float()
                 correct_emotion += (predicted_emotion == emotion).sum().item()
                 total += emotion.size(0)
