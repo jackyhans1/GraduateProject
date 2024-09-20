@@ -9,7 +9,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', type=str, default=r'datasets', help='root of data')
-parser.add_argument('--log_root', type=str, default=r'checkpoints/CNN/ep049-loss0.449-val_loss0.451.pth', help='root of model.pth')
+parser.add_argument('--log_root', type=str, default=r'checkpoints/CNN/ep047-loss0.465-val_loss0.482.pth', help='root of model.pth')
 parser.add_argument('--save_root', type=str, default=r'checkpoints/CNN', help='root of saved confusion_matrix')
 parser.add_argument('--random_seed', type=int, default=10, help='random seed')
 parser.add_argument('--model_kind', type=str, default='cnn', help='kind of model, i.e. cnn or rnn or transformer')
@@ -52,10 +52,10 @@ def main():
             mfcc, emotion = mfcc.to(device), emotion.to(device)
 
             output_emotion = model(mfcc)
-            output_emotion = output_emotion.float()  # mps -> 시그모이드 함수 int64 지원 안 함
+            output_emotion = output_emotion.float()  # mps -> 시그모이드 함수 int64 지원 안 함 ->float으로 변환
             output_emotion = torch.sigmoid(output_emotion)
             
-            # 0.5 기준으로 이진 분류
+            # 0.56 기준으로 이진 분류
             predicted_emotion = (output_emotion > 0.56).float()
 
             # 리스트에 저장

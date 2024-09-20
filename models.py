@@ -16,13 +16,12 @@ class CNN(nn.Module):
         nn.AdaptiveAvgPool2d(output_size=(1,1))
         )
         self.fc1 = nn.Linear(128,2)
-        self.softmax = nn.Softmax(dim=1)
+        self.sigmoid = nn.Sigmoid()
     def forward(self, x):
         x=x.unsqueeze(dim=1)
         x=self.cnn(x).squeeze()
         emotion=self.fc1(x)
-        emotion = self.softmax(emotion)
-
+        emotion = self.sigmoid(emotion)
         return emotion
     
 class CNN_test(nn.Module):
@@ -40,15 +39,12 @@ class CNN_test(nn.Module):
         nn.AdaptiveAvgPool2d(output_size=(1,1))
         )
         self.fc1 = nn.Linear(128,2)
-        # self.softmax = nn.Softmax(dim=1)
         self.sigmoid = nn.Sigmoid()
     def forward(self, x):
         x=x.unsqueeze(dim=1)
         x=self.cnn(x).squeeze()
         # x = x.unsqueeze(dim=0)
         emotion=self.fc1(x)
-        # emotion = self.softmax(emotion).squeeze()
-        # emotion = torch.argmax(emotion, dim=0)
         emotion = self.sigmoid(emotion)  # sigmoid 함수 이용하여 확률 반환
         return emotion
 
@@ -141,8 +137,9 @@ class CNN_test(nn.Module):
 #         emotion = torch.argmax(emotion, dim=0)
 #         sex = torch.argmax(sex, dim=0)
 #         return emotion, sex
-if __name__ == '__main__':
-    input_tensor=torch.ones((1,126,16))
-    model=CNN_test()
-    emotion,sex=model(input_tensor)
-    print(emotion,sex)
+    
+# if __name__ == '__main__':
+#     input_tensor=torch.ones((1,126,16))
+#     model=CNN_test()
+#     emotion,sex=model(input_tensor)
+#     print(emotion,sex)
