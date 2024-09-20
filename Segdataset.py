@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
 import librosa  # librosa 추가
 
 # 감정 레이블 정의
@@ -31,7 +32,7 @@ def get_mfcc(file_path, n_mfcc=16, sr=16000, n_mels=32, fmax=None):
 
 def read_file_list(root='datasets', n_mfcc=16, random_state=1, test_size=0.25):
     """
-    파일 목록을 읽고 학습/검증 데이터셋으로 분리.
+    파일 목록을 읽고 학습/검증 데이터셋으로 분리하고, 클래스 불균형을 해소하여 1:1 비율로 맞추는 함수.
 
     Args:
         root (str): 데이터셋 루트 디렉터리
@@ -44,6 +45,8 @@ def read_file_list(root='datasets', n_mfcc=16, random_state=1, test_size=0.25):
         val_data (tuple): 검증 데이터셋 (MFCC, 감정 레이블)
     """
     file_path_all = []
+    labels_all = []
+    stressed_emotions = ['angry', 'disgust', 'fear', 'sad']
     
     # 디렉터리에서 파일 경로 수집 (디렉터리 내의 파일만)
     for dir_name in os.listdir(root):
@@ -56,17 +59,46 @@ def read_file_list(root='datasets', n_mfcc=16, random_state=1, test_size=0.25):
             file_path = os.path.join(dir_root, file_name)
             if os.path.isfile(file_path):
                 file_path_all.append(file_path)
+                # 감정 레이블을 이진 스트레스 레이블로 변환
+                emotion = 1 if any(emotion_label in file_name for emotion_label in stressed_emotions) else 0
+                labels_all.append(emotion)
 
-    # 파일을 학습용과 검증용으로 분리 (여기서 중복 없이 분리)
-    train_files, val_files = train_test_split(file_path_all, test_size=test_size, random_state=random_state)
+    file_path_all = np.array(file_path_all)
+    labels_all = np.array(labels_all)
+    
+    # 스트레스와 비스트레스 각각의 파일을 구분
+    stressed_files = file_path_all[labels_all == 1]
+    non_stressed_files = file_path_all[labels_all == 0]
 
+    # 클래스 비율을 맞추기 위한 undersampling (1:1 비율)
+    min_class_size = min(len(stressed_files), len(non_stressed_files))
+
+    stressed_files = np.random.choice(stressed_files, min_class_size, replace=False)
+    non_stressed_files = np.random.choice(non_stressed_files, min_class_size, replace=False)
+
+    # 비율을 맞춘 데이터를 결합하고 섞기
+    file_path_all = np.concatenate([stressed_files, non_stressed_files])
+    labels_all = np.array([1] * min_class_size + [0] * min_class_size)
+    
+    # 파일과 레이블을 섞기
+    combined = list(zip(file_path_all, labels_all))
+    np.random.shuffle(combined)
+    file_path_all, labels_all = zip(*combined)
+    file_path_all = np.array(file_path_all)
+    labels_all = np.array(labels_all)
+
+    # StratifiedKFold를 사용하여 데이터셋 분리
+    skf = StratifiedKFold(n_splits=int(1 / test_size), shuffle=True, random_state=random_state)
+    
+    train_index, val_index = next(skf.split(file_path_all, labels_all))
+    
+    train_files, val_files = file_path_all[train_index], file_path_all[val_index]
+    
     def process_files(file_paths):
         mfcc_list, emotion_list = [], []
-        stressed_emotions = ['angry', 'disgust', 'fear', 'sad']
-
+        
         for file_path in file_paths:
             mfcc = get_mfcc(file_path, n_mfcc)
-                        
             # 감정 레이블을 이진 스트레스 레이블로 변환
             emotion = 1 if any(emotion_label in file_path for emotion_label in stressed_emotions) else 0
             mfcc_list.append(mfcc)
@@ -79,6 +111,7 @@ def read_file_list(root='datasets', n_mfcc=16, random_state=1, test_size=0.25):
     val_data = process_files(val_files)
 
     return train_data, val_data
+
 
 class SegDataset(Dataset):
     def __init__(self, data):
@@ -98,4 +131,3 @@ class SegDataset(Dataset):
 
     def __len__(self):
         return len(self.mfcc)
-
