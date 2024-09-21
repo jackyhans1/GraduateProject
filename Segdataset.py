@@ -1,94 +1,170 @@
 import os
-import cv2
-from PIL import Image
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from torchvision import transforms
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
 from utils import get_mfcc
-emotions=['angry','disgust','fear','happy','neutral','ps','sad']
 
-def read_file_list(root=r'datasets', type='train', n_mfcc=16, random_state=1, test_size=0.25):
-    root = os.path.join(root, type)
-    file_path_all = []
-    
-    # 디렉토리에서 파일 경로 수집
-    for dir_name in os.listdir(root):
-        dir_root = os.path.join(root, dir_name)
-        
-        # dir_root가 디렉토리인지 확인
-        if not os.path.isdir(dir_root):
+# Define emotion classes
+emotions = ['angry', 'disgust', 'fear', 'happy', 'neutral', 'ps', 'sad']
+
+def read_train_file_list(root='datasets/train', n_mfcc=16):
+    data_path = root
+    file_paths = []
+
+    if not os.path.exists(data_path):
+        raise FileNotFoundError(f"Root directory '{data_path}' does not exist.")
+
+    for dir_name in os.listdir(data_path):
+        dir_path = os.path.join(data_path, dir_name)
+
+        if not os.path.isdir(dir_path):
             continue
-        
-        for file in os.listdir(dir_root):
-            # .DS_Store 파일을 무시
-            if file == '.DS_Store':
+
+        for file in os.listdir(dir_path):
+            if file == '.DS_Store':  # 무시할 파일
                 continue
-            
-            file_path = os.path.join(dir_root, file)
-            file_path_all.append(file_path)
-    
+
+            file_path = os.path.join(dir_path, file)
+            file_paths.append(file_path)
+
+    if len(file_paths) == 0:
+        raise ValueError(f"No files found in directory '{data_path}'.")
+
     mfcc_list = []
     emotion_list = []
-    
-    # 감정 상태에 따라 mfcc와 emotion 리스트 구성
-    for file_path in file_path_all:
-        mfcc = get_mfcc(file_path, n_mfcc)
+
+    for file_path in file_paths:
+        try:
+            mfcc = get_mfcc(file_path, n_mfcc)
+        except Exception as e:
+            print(f"Error processing file {file_path}: {e}")
+            continue
 
         if 'happy' in file_path or 'neutral' in file_path or 'ps' in file_path:
             emotion = 0  # NotStressed
         elif 'angry' in file_path or 'disgust' in file_path or 'sad' in file_path or 'fear' in file_path:
             emotion = 1  # Stressed
-        
+        else:
+            print(f"Skipping file {file_path}, no matching emotion label.")
+            continue
+
         mfcc_list.append(mfcc)
         emotion_list.append(emotion)
+
+    if len(mfcc_list) == 0 or len(emotion_list) == 0:
+        raise ValueError("No valid data found after processing files.")
+
+    return mfcc_list, emotion_list
+
+
+def read_test_file_list(root='datasets/test', n_mfcc=16):
+    data_path = root 
+    file_paths = []
+
+    if not os.path.exists(data_path):
+        raise FileNotFoundError(f"Root directory '{data_path}' does not exist.")
+
+    for dir_name in os.listdir(data_path):
+        dir_path = os.path.join(data_path, dir_name)
+
+        if not os.path.isdir(dir_path):
+            continue
+
+        for file in os.listdir(dir_path):
+            if file == '.DS_Store':  # 무시할 파일
+                continue
+
+            file_path = os.path.join(dir_path, file)
+            file_paths.append(file_path)
+
+    if len(file_paths) == 0:
+        raise ValueError(f"No files found in directory '{data_path}'.")
+
+    mfcc_list = []
+    emotion_list = []
+
+    for file_path in file_paths:
+        try:
+            mfcc = get_mfcc(file_path, n_mfcc)
+        except Exception as e:
+            print(f"Error processing file {file_path}: {e}")
+            continue
+
+        # Assign emotion labels (0 = NotStressed, 1 = Stressed)
+        if 'happy' in file_path or 'neutral' in file_path or 'ps' in file_path:
+            emotion = 0  # NotStressed
+        elif 'angry' in file_path or 'disgust' in file_path or 'sad' in file_path or 'fear' in file_path:
+            emotion = 1  # Stressed
+        else:
+            print(f"Skipping file {file_path}, no matching emotion label.")
+            continue
+
+        mfcc_list.append(mfcc)
+        emotion_list.append(emotion)
+
+    if len(mfcc_list) == 0 or len(emotion_list) == 0:
+        raise ValueError("No valid data found after processing files.")
+
+    return mfcc_list, emotion_list
+
+def get_kfold_data(k_folds=5, random_state=1, root='datasets/train', n_mfcc=16):
+    # Read train dataset only
+    mfcc_list, emotion_list = read_train_file_list(root=root, n_mfcc=n_mfcc)
     
-    mfcc_train, mfcc_val, emotion_train, emotion_val = train_test_split(mfcc_list, emotion_list, test_size=test_size, random_state=random_state)
+    skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=random_state)
+    
+    fold_data = []
+    
+    # K-fold split
+    for train_index, val_index in skf.split(mfcc_list, emotion_list):
+        mfcc_train = [mfcc_list[i] for i in train_index]
+        mfcc_val = [mfcc_list[i] for i in val_index]
+        emotion_train = [emotion_list[i] for i in train_index]
+        emotion_val = [emotion_list[i] for i in val_index]
+        
+        fold_data.append((mfcc_train, mfcc_val, emotion_train, emotion_val))
+    return fold_data
 
-    if type == 'train':
-        return mfcc_train, emotion_train
-    elif type == 'val':
-        return mfcc_val, emotion_val
 
-
-class SegDataset(torch.utils.data.Dataset):
-    def __init__(self, root=r'datasets', type='train', n_mfcc=16, random_state=1, test_size=0.25):
-
-        mfcc, emotion= read_file_list(root=root, type=type, n_mfcc=n_mfcc, random_state=random_state, test_size=test_size)
-
-        self.mfcc = mfcc
-        self.emotion = emotion
-
-        print('Read ' + str(len(self.mfcc)) + ' valid examples')
-
+class SegDataset(Dataset):
+    def __init__(self, mfcc_list, emotion_list):
+        self.mfcc = mfcc_list
+        self.emotion = emotion_list
+        print(f"Dataset loaded with {len(self.mfcc)} samples.")
 
     def __getitem__(self, idx):
         mfcc = self.mfcc[idx]
         emotion = self.emotion[idx]
 
-        mfcc = torch.from_numpy(np.array(mfcc)).type(torch.FloatTensor).transpose(1,0)
-        emotion = torch.from_numpy(np.array(emotion)).long()
+        # Convert to Torch tensor and adjust dimensions
+        mfcc = torch.from_numpy(np.array(mfcc)).type(torch.FloatTensor).transpose(1, 0)
+        emotion = torch.tensor(emotion, dtype=torch.long)
 
-
-
-        return mfcc, emotion  # float32 tensor, uint8 tensor
+        return mfcc, emotion
     
     def __len__(self):
         return len(self.mfcc)
 
 if __name__ == "__main__":
+    try:
+        k_folds_data = get_kfold_data(k_folds=5, random_state=1, root='datasets/train', n_mfcc=16)
+        
+        for fold_idx, (train_mfcc, val_mfcc, train_emotion, val_emotion) in enumerate(k_folds_data):
+            print(f"Fold {fold_idx + 1} | Train size: {len(train_mfcc)}, Val size: {len(val_mfcc)}")
+            
+            # Load the training dataset for the current fold
+            train_dataset = SegDataset(train_mfcc, train_emotion)
+            val_dataset = SegDataset(val_mfcc, val_emotion)
 
-    voc_train = SegDataset()
-    print(type(voc_train))#<class '__main__.VOCSegDataset'>
-    print(len(voc_train))
-    img, label,_ = voc_train[11]
-    # img=np.transpose(np.array(img, np.float64), [1, 2, 0])
-    print(img)
-    print(label)
-    # plt.imshow(img)
-    # plt.show()
-    print(type(img), type(label))
-    print(img.shape, label.shape, _.shape)
-    print(label,_)
-
+            print(f"Train Dataset Length: {len(train_dataset)}, Val Dataset Length: {len(val_dataset)}")
+            
+            emotion_0_count = val_emotion.count(0)
+            emotion_1_count = val_emotion.count(1)
+            print(f"Fold {fold_idx + 1}: Emotion 0 count: {emotion_0_count}, Emotion 1 count: {emotion_1_count}")
+            
+            sample_mfcc, sample_emotion = train_dataset[0]
+            print("Sample MFCC shape:", sample_mfcc.shape)
+            print("Sample Emotion Label:", sample_emotion)
+    except Exception as e:
+        print(f"An error occurred: {e}")

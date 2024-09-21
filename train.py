@@ -1,135 +1,162 @@
 import numpy as np
+import torch
 import torch.optim as optim
+import torch.nn as nn
 import matplotlib.pyplot as plt
-from models import *
-from Segdataset import SegDataset
+from models import CNN
+from Segdataset import read_train_file_list, SegDataset
+from sklearn.model_selection import KFold
 import argparse
 from torch.utils.data import DataLoader
 import os
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--data_root', type=str, default=r'datasets', help='root of data')
-parser.add_argument('--save_root', type=str, default=r'checkpoints/Transformer', help='root of saved model.pth')
+parser.add_argument('--data_root', type=str, default=r'datasets/train', help='root of data')
+parser.add_argument('--save_root', type=str, default=r'checkpoints/CNN', help='root of saved model.pth')
 parser.add_argument('--epoch', type=int, default=50, help='epoch number')
-parser.add_argument('--lr', type=float, default=3e-4, help='learning rate') # 기존: 5e-4 -> 3e-4
+parser.add_argument('--lr', type=float, default=3e-4, help='learning rate') 
 parser.add_argument('--batch_size', type=int, default=32, help='training batch size')
 parser.add_argument('--num_workers', type=int, default=8, help='num_workers')
 parser.add_argument('--random_seed', type=int, default=1, help='random seed')
-parser.add_argument('--model_kind', type=str, default='cnn', help='kind of model, i.e. cnn or rnn or transformer')
-parser.add_argument('--is_shuffle_dataset', type=bool, default=True, help='shuffle dataset or not')
-parser.add_argument('--test_split', type=float, default=0.25, help='ratio of the test set')
 parser.add_argument('--n_mfcc', type=int, default=16, help='characteristic dimension of MFCC')
+parser.add_argument('--n_splits', type=int, default=5, help='number of folds for cross-validation')
 opt = parser.parse_args()
 
 def main():
+    print("Training by CNN")
 
-    if opt.model_kind == 'cnn':
-        print("train by CNN")
-        model = CNN()
-
+    # 저장 디렉토리 없으면 생성
     if not os.path.exists(opt.save_root):
         os.makedirs(opt.save_root)
-        print('create'+opt.save_root)
+        print('Created directory:', opt.save_root)
 
-    train = SegDataset(root=opt.data_root, type='train', n_mfcc=opt.n_mfcc, random_state=opt.random_seed, test_size=opt.test_split)
-    val = SegDataset(root=opt.data_root, type='val', n_mfcc=opt.n_mfcc, random_state=opt.random_seed, test_size=opt.test_split)
+    # 데이터셋 로딩
+    mfcc_list, emotion_list = read_train_file_list(root=opt.data_root, n_mfcc=opt.n_mfcc)
 
-    train_iter = torch.utils.data.DataLoader(train, opt.batch_size, shuffle=opt.is_shuffle_dataset, drop_last=True, num_workers=opt.num_workers)
-    test_iter = torch.utils.data.DataLoader(val, opt.batch_size, drop_last=True, num_workers=opt.num_workers)
-    
+    # KFold cross-validation
+    kf = KFold(n_splits=opt.n_splits, shuffle=True, random_state=opt.random_seed)
+
     if torch.cuda.is_available():
-        device = torch.device('cuda:1')
+        device = torch.device('cuda')
     elif torch.backends.mps.is_available():
         device = torch.device('mps')
     else:
         device = torch.device('cpu')
     
-    print(f"using device : {device}")
+    print(f"Using device: {device}")
 
     all_train_epoch_loss = []
     all_test_epoch_loss = []
-    all_test_epoch_accuracy_emotion=[]
-    model = model.to(device)
+    all_test_epoch_accuracy_emotion = []
 
-    pos_weight = torch.tensor([0.75]).to(device) #positiveData(Stressed) : negativeData(NotStressed) = 4: 3 데이터 비율이기에 보정
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight).to(device)    #Binary Cross Entropy with Logits Loss 활성화 함수 이용
+    for fold, (train_idx, val_idx) in enumerate(kf.split(mfcc_list)):
+        print(f"Fold {fold + 1}/{opt.n_splits}")
 
-    optimizer = optim.Adam(model.parameters(), opt.lr)
+        # 모델을 fold마다 초기화
+        model = CNN().to(device)
 
+        # 학습/검증 데이터로 쪼개기
+        train_mfcc = [mfcc_list[i] for i in train_idx]
+        train_emotion = [emotion_list[i] for i in train_idx]
+        val_mfcc = [mfcc_list[i] for i in val_idx]
+        val_emotion = [emotion_list[i] for i in val_idx]
 
+        train_set = SegDataset(train_mfcc, train_emotion)
+        val_set = SegDataset(val_mfcc, val_emotion)
 
-    for epo in range(opt.epoch):
-        train_loss = 0
-        model.train()
+        # Create dataloaders
+        train_loader = DataLoader(train_set, batch_size=opt.batch_size, shuffle=True, drop_last=True, num_workers=opt.num_workers)
+        val_loader = DataLoader(val_set, batch_size=opt.batch_size, shuffle=False, drop_last=True, num_workers=opt.num_workers)
 
-        for index, (mfcc, emotion) in enumerate(train_iter): 
-            mfcc, emotion =mfcc.to(device), emotion.to(device)
-            optimizer.zero_grad()
-            output_emotion = model(mfcc)
+        # 각 fold에 따라 pos_weight 동적으로 설정
+        num_pos = sum(em == 1 for em in train_emotion)
+        num_neg = sum(em == 0 for em in train_emotion)
+        pos_weight = torch.tensor([num_neg / num_pos]).to(device) if num_pos > 0 else torch.tensor([1.0]).to(device)
 
-            emotion = emotion.float()
+        # loss and optimizer 선언
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight).to(device)
+        optimizer = optim.Adam(model.parameters(), lr=opt.lr)
 
-            loss = criterion(output_emotion[:, 0].squeeze(), emotion)
-            loss.backward()
-            iter_loss = loss.item()
-            train_loss += iter_loss
-            optimizer.step()
+        # 현재 폴드 값들 저장
+        train_losses = []
+        val_losses = []
+        val_accuracies = []
 
-            if np.mod(index, 15) == 0:
-                print('epoch {}, {}/{},train loss is {}'.format(epo, index, len(train_iter), iter_loss))
+        best_val_loss = float('inf')
+        best_epoch = 0
 
-        # test
-        test_loss = 0
-        correct_emotion = 0
-        total=0
-        model.eval()
-        with torch.no_grad():
-            for index, (mfcc, emotion) in enumerate(test_iter):
+        for epo in range(opt.epoch):
+            model.train()
+            train_loss = 0
+
+            for index, (mfcc, emotion) in enumerate(train_loader):
                 mfcc, emotion = mfcc.to(device), emotion.to(device)
                 optimizer.zero_grad()
                 output_emotion = model(mfcc)
+
                 emotion = emotion.float()
-
                 loss = criterion(output_emotion[:, 0].squeeze(), emotion)
-                test_loss += loss.item()
+                loss.backward()
+                optimizer.step()
 
-                # 이진 분류 결과를 torch.sigmoid를 통해 확률로 변환하고, 0.56 기준으로 분류
-                predicted_emotion = (torch.sigmoid(output_emotion[:, 0]) > 0.56).float()
-                correct_emotion += (predicted_emotion == emotion).sum().item()
-                total += emotion.size(0)
-        accuracy_emotion = (correct_emotion / total)
-        print('<---------------------------------------------------->')
-        print('epoch: %f' % epo)
-        print('epoch train loss = %f, epoch test loss = %f,accuracy_emotion =%.3f'
-              % (train_loss / len(train_iter), test_loss / len(test_iter),accuracy_emotion))
+                train_loss += loss.item()
 
-        if np.mod(epo, 1) == 0:
-            torch.save(model.state_dict(), opt.save_root+'/ep%03d-loss%.3f-val_loss%.3f.pth' % (
-                (epo + 1), (train_loss / len(train_iter)), (test_loss / len(test_iter)))
-                       )
-            print('saving checkpoints/model_{}.pth'.format(epo))
-        all_test_epoch_accuracy_emotion.append(accuracy_emotion)
-        all_train_epoch_loss.append(train_loss / len(train_iter))
-        all_test_epoch_loss.append(test_loss / len(test_iter))
+            # 검증
+            model.eval()
+            val_loss = 0
+            correct_emotion = 0
+            total = 0
+            with torch.no_grad():
+                for mfcc, emotion in val_loader:
+                    mfcc, emotion = mfcc.to(device), emotion.to(device)
+                    output_emotion = model(mfcc)
+                    emotion = emotion.float()
 
-    # plot
-    plt.figure()
-    plt.title('train_loss')
-    plt.plot(all_train_epoch_loss)
-    plt.xlabel('epoch')
-    plt.savefig(opt.save_root+'/train_loss.png')
+                    loss = criterion(output_emotion[:, 0].squeeze(), emotion)
+                    val_loss += loss.item()
 
-    plt.figure()
-    plt.title('test_loss')
-    plt.plot(all_test_epoch_loss)
-    plt.xlabel('epoch')
-    plt.savefig(opt.save_root+'/test_loss.png')
+                    predicted_emotion = (torch.sigmoid(output_emotion[:, 0]) > 0.56).float()
+                    correct_emotion += (predicted_emotion == emotion).sum().item()
+                    total += emotion.size(0)
 
-    plt.figure()
-    plt.title('test_accury_emotion')
-    plt.plot(all_test_epoch_accuracy_emotion)
-    plt.xlabel('epoch')
-    plt.savefig(opt.save_root+'/test_accuracy_emotion.png')
+            val_accuracy = correct_emotion / total
+            print(f"Epoch {epo} | Fold {fold + 1} | Train Loss: {train_loss / len(train_loader)} | Val Loss: {val_loss / len(val_loader)} | Val Accuracy: {val_accuracy}")
+
+            # 모델 저장
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_epoch = epo
+                torch.save(model.state_dict(), os.path.join(opt.save_root, f'fold_{fold + 1}_best_epoch.pth'))
+
+            # Track the training and validation losses and accuracies for plotting later
+            train_losses.append(train_loss / len(train_loader))
+            val_losses.append(val_loss / len(val_loader))
+            val_accuracies.append(val_accuracy)
+
+        print(f"Fold{fold+1} best epoch : {best_epoch} ")
+        
+        # Fold별로 train, val 손실값을 저장
+        all_train_epoch_loss.append(train_losses)
+        all_test_epoch_loss.append(val_losses)
+        all_test_epoch_accuracy_emotion.append(val_accuracies)
+
+        # Fold별로 그래프를 그리기 (Colab에서 바로 확인 가능하도록)
+        plt.figure(figsize=(10, 5))
+        plt.plot(train_losses, label='Train Loss')
+        plt.plot(val_losses, label='Validation Loss')
+        plt.title(f'Fold {fold + 1} Losses')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.show()
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(val_accuracies, label='Validation Accuracy')
+        plt.title(f'Fold {fold + 1} Accuracy')
+        plt.xlabel('Epoch')
+        plt.ylabel('Accuracy')
+        plt.legend()
+        plt.show()
 
 if __name__ == '__main__':
     main()

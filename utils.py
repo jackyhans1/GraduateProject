@@ -28,15 +28,14 @@ def getNearestLen(framelength,sr):
     return framesize
 
 def get_mfcc(path,n_mfcc):
-    path=path
-    y,sr = librosa.load(path,sr=None)
+    y,sr = librosa.load(path,sr=16000)
     VOICE_LEN=32000
 
     N_FFT=getNearestLen(0.25,sr)
 
     y=normalizeVoiceLen(y,VOICE_LEN)
 
-    mfcc_data=librosa.feature.mfcc(y=y, sr=sr,n_mfcc=n_mfcc,n_fft=N_FFT,hop_length=int(N_FFT/4))
+    mfcc_data=librosa.feature.mfcc(y=y, sr=sr,n_mfcc=n_mfcc,n_fft=N_FFT,hop_length=int(N_FFT/4),fmax = sr//2)
     return mfcc_data
 
 def plot_confusion_matrix(y_true, y_pred, labels):
