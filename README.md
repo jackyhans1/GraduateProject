@@ -14,7 +14,7 @@ AI를 활용한 운전자의 발성 데이터를 분석하여 스트레스 수�
 - **TESS 데이터셋**을 사용하였으며, 총 7개의 감정(angry, disgust, fear, happy, neutral, ps, sad)을 **스트레스 상태(Stressed)** 와 **비스트레스 상태(NotStressed)** 로 이진 분류했습니다. 
   - **Stressed**: angry, disgust, fear, sad
   - **NotStressed**: happy, neutral, ps
-- 음성 데이터를 **MFCC(Mel-Frequency Cepstral Coefficients)**로 변환하여 모델 학습에 필요한 음향 특징을 추출했습니다.
+- 음성 데이터를 **MFCC(Mel-Frequency Cepstral Coefficients)** 로 변환하여 모델 학습에 필요한 음향 특징을 추출했습니다.
 
 ### **2.2 모델 아키텍처**
 - **CNN**: 3개의 **Convolution** 레이어와 **Dropout**을 사용하여 음성 데이터를 처리했습니다.
