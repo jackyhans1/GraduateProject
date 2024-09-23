@@ -47,6 +47,38 @@ class CNN_test(nn.Module):
         emotion=self.fc1(x)
         emotion = self.sigmoid(emotion)  # sigmoid 함수 이용하여 확률 반환
         return emotion
+    
+class RNN(nn.Module):
+    def __init__(self, n_mfcc=16):
+        super().__init__()
+
+        self.LSTM = nn.LSTM(n_mfcc, 40, 4, batch_first=True)
+        self.avg = nn.AdaptiveAvgPool1d(output_size=1)
+        self.fc1 = nn.Linear(40, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.LSTM(x)[0].transpose(2, 1)
+        x = self.avg(x).squeeze()
+        emotion = self.fc1(x)
+        emotion = self.sigmoid(emotion)
+        return emotion
+
+class RNN_test(nn.Module):
+    def __init__(self, n_mfcc=16):
+        super().__init__()
+
+        self.LSTM = nn.LSTM(n_mfcc, 40, 4, batch_first=True)
+        self.avg = nn.AdaptiveAvgPool1d(output_size=1)
+        self.fc1 = nn.Linear(40, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.LSTM(x)[0].transpose(2, 1)
+        x = self.avg(x).squeeze()
+        emotion = self.fc1(x)
+        emotion = self.sigmoid(emotion)
+        return emotion
 
 # class RNN(nn.Module):
 #     def __init__(self,n_mfcc=16):
@@ -66,6 +98,29 @@ class CNN_test(nn.Module):
 #         sex = self.fc2(x)
 #         emotion = self.softmax(emotion)
 #         sex = self.softmax(sex)
+#         return emotion, sex
+
+# class RNN_test(nn.Module):
+#     def __init__(self,n_mfcc=16):
+#         super().__init__()
+
+#         self.LSTM=nn.LSTM(n_mfcc, 40, 4,batch_first=True)
+#         self.avg=nn.AdaptiveAvgPool1d(output_size=1)
+#         self.fc1 = nn.Linear(40, 7)
+#         self.fc2 = nn.Linear(40, 2)
+#         self.softmax=nn.Softmax(dim=1)
+
+
+#     def forward(self, x):
+#         x=self.LSTM(x)[0].transpose(2,1)
+#         x=self.avg(x).squeeze()
+#         x = x.unsqueeze(dim=0)
+#         emotion = self.fc1(x)
+#         sex = self.fc2(x)
+#         emotion = self.softmax(emotion).squeeze()
+#         sex = self.softmax(sex).squeeze()
+#         emotion = torch.argmax(emotion, dim=0)
+#         sex = torch.argmax(sex, dim=0)
 #         return emotion, sex
 
 # class Transformer(nn.Module):
@@ -91,28 +146,7 @@ class CNN_test(nn.Module):
 
 
 
-# class RNN_test(nn.Module):
-#     def __init__(self,n_mfcc=16):
-#         super().__init__()
 
-#         self.LSTM=nn.LSTM(n_mfcc, 40, 4,batch_first=True)
-#         self.avg=nn.AdaptiveAvgPool1d(output_size=1)
-#         self.fc1 = nn.Linear(40, 7)
-#         self.fc2 = nn.Linear(40, 2)
-#         self.softmax=nn.Softmax(dim=1)
-
-
-#     def forward(self, x):
-#         x=self.LSTM(x)[0].transpose(2,1)
-#         x=self.avg(x).squeeze()
-#         x = x.unsqueeze(dim=0)
-#         emotion = self.fc1(x)
-#         sex = self.fc2(x)
-#         emotion = self.softmax(emotion).squeeze()
-#         sex = self.softmax(sex).squeeze()
-#         emotion = torch.argmax(emotion, dim=0)
-#         sex = torch.argmax(sex, dim=0)
-#         return emotion, sex
 
 # class Transformer_test(nn.Module):
 #     def __init__(self,n_mfcc=16):
