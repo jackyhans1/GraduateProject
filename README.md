@@ -13,7 +13,7 @@ SSSR focuses on analyzing speech data to predict stress states. By leveraging em
 - **HuBERT (LS-960) Finetuning**: Finetuned HuBERT model leveraging pre-trained self-supervised audio representations.
 
 ### Current Progress:
-The project is in its early stages and is actively being developed. While preliminary experiments have been conducted on **TESS** and **CREMA-D**, we are awaiting access to the **BESST dataset**, a speech-stress-specific dataset, to enhance model performance and validate results.
+The project is in its early stages and is actively being developed. While preliminary experiments have been conducted on **TESS** and **CREMA-D**, we are awaiting access to the [**BESST dataset**](https://speech.fit.vut.cz/software/besst), a speech-stress-specific dataset, to enhance model performance and validate results.
 
 ## Datasets
 
@@ -23,7 +23,7 @@ A dataset consisting of emotional speech samples recorded by two actors, coverin
 ### [CREMA-D (Crowd-Sourced Emotional Multimodal Actors Dataset)](https://www.kaggle.com/datasets/ejlok1/cremad)
 A dataset containing emotionally diverse audio recordings performed by 91 actors with six basic emotions and neutral expressions.
 
-### [BESST Dataset] (https://speech.fit.vut.cz/software/besst)
+### [BESST Dataset](https://speech.fit.vut.cz/software/besst)
 The **BESST dataset**, designed specifically for mapping speech to stress levels, is a key component for the next phase of development. Access to this dataset is currently pending.
 
 ## Future Plans
