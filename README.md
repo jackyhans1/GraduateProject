@@ -1,4 +1,4 @@
-# graduate-project
+# SSSR (Speech Stress State Regognition)
 AI를 활용한 음성 데이터를 분석하여 스트레스 수준을 평가하는 모델
 
 #Toronto emotional speech set
